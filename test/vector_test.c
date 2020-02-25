@@ -14,8 +14,8 @@ int main(void)
     printf("Vector test file\n");
 
     // Let's crate a vector
-    struct vector *v; 
-    if ( ERROR == vector_construct(&v, sizeof(int)) )
+    Vector *test_vector; 
+    if ( ERROR == vector_construct(&test_vector, sizeof(int)) )
     {
         printf("Failed at constructing a vector\n");
     }
@@ -26,7 +26,7 @@ int main(void)
         int k = rand();
         array_in[i] = k;
         printf("Put in item: %d\n", k);
-        if ( ERROR == vector_put(v, &k) )
+        if ( ERROR == vector_put(test_vector, &k) )
         {
             printf("Failed at putting in an item\n");
         }
@@ -36,7 +36,7 @@ int main(void)
     for( int i = 0; i < TEST_VECTOR_LEN; i++)
     {
         int k;
-        vector_get(v, i ,&k);
+        vector_get(test_vector, i ,&k);
         array_out[i] = k;
         printf("Got out item: %d\n", k);
     }
@@ -46,5 +46,5 @@ int main(void)
         assert(array_in[i] == array_out[i]);
     }
 
-    vector_destroy(v);
+    vector_destroy(test_vector);
 }
