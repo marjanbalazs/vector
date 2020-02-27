@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <pthread.h>
+#include <stdio.h>
 
 #include "../vector.h"
 
@@ -13,16 +14,14 @@
 #define GROWTH_FACTOR       ( 2 )
 #define SHRINK_FACTOR       ( 1/2 )
 
-//#define MULTITHREADED
-
 #ifdef MULTITHREADED
 
-
+// based on W Richard Stevens - Unix Network Programming Volume 2.
 
 struct rwlock {
-    bool writer_active;
-    int read_count;
-    int write_count;
+    int refcount;
+    int read_wait_count;
+    int write_wait_count;
     pthread_mutex_t mutex;
     pthread_cond_t r_cond;
     pthread_cond_t w_cond;
@@ -30,9 +29,9 @@ struct rwlock {
 
 int init_rwlockl(struct rwlock *lock)
 {
-    lock->writer_active = false;
-    lock->read_count = 0;
-    lock->write_count = 0;
+    lock->refcount = 0;
+    lock->read_wait_count = 0;
+    lock->write_wait_count = 0;
     pthread_mutex_init(&lock->mutex, NULL);
     pthread_cond_init(&lock->r_cond, NULL);
     pthread_cond_init(&lock->w_cond, NULL);
@@ -40,45 +39,59 @@ int init_rwlockl(struct rwlock *lock)
     return SUCCESS;
 }
 
-void rwlock_read_enter_critical(struct rwlock *lock)
+void rwlock_read_lock(struct rwlock *lock)
 {
     pthread_mutex_lock(&lock->mutex);
-    lock->read_count++;
-    while ( lock->read_count == 1 ) {
+
+    // If a writer is currently active or writers are waiting
+    while ( lock->refcount < 0 || lock->write_wait_count > 0 ) {
+        lock->read_wait_count++;
         pthread_cond_wait(&lock->r_cond,
                     &lock->mutex);
+        lock->read_wait_count--;
     }
+
+    lock->refcount++;
+
     pthread_mutex_unlock(&lock->mutex);
 }
  
-void rwlock_read_exit_critical(struct rwlock *lock)
+void rwlock_write_lock(struct rwlock *lock)
 {
     pthread_mutex_lock(&lock->mutex);
-    lock->read_count--;
-    while ( lock->read_count == 0 ) {
-        pthread_cond_signal(&lock->r_cond);
-    }
-    pthread_mutex_unlock(&lock->mutex);
-}
 
-void rwlock_write_enter_critical(struct rwlock *lock)
-{
-    pthread_mutex_lock(&lock->mutex);
-    lock->write_count++;
-    if ( lock->write_count > 0 ) {
+    if ( lock->refcount != 0 ) {
+        lock->write_wait_count++;
         pthread_cond_wait(&lock->w_cond,
                          &lock->mutex);
+
+        lock->write_wait_count--;
     }
+
+    lock->refcount = -1;
+
     pthread_mutex_unlock(&lock->mutex);
 }
 
-void rwlock_write_exit_critical(struct rwlock *lock)
+void rwlock_unlock(struct rwlock *lock)
 {
     pthread_mutex_lock(&lock->mutex);
-    lock->write_count--;
-    if ( lock->write_count == 0) {
-        pthread_cond_signal(&lock->w_cond);
+
+    if ( lock->refcount > 0) {
+        lock->refcount--;
+        
+    } else if ( lock->refcount = -1 ) {
+        lock->refcount = 0;
+    } else {}
+
+    if ( lock->write_wait_count > 0 ) {
+        if ( lock->refcount == 0 ) {
+            pthread_cond_signal(&lock->w_cond);
+        }
+    } else if ( lock->read_wait_count > 0 ) {
+        pthread_cond_broadcast(&lock->r_cond);
     }
+
     pthread_mutex_unlock(&lock->mutex);
 }
 
@@ -145,7 +158,7 @@ int vector_get(struct vector *vector, size_t num, void *out)
     int ret = SUCCESS;
 
 #ifdef MULTITHREADED
-    rwlock_read_enter_critical(&(vector->lock));
+    rwlock_read_lock(&(vector->lock));
 #endif
 
     if ( num > vector->size ) {
@@ -157,7 +170,7 @@ int vector_get(struct vector *vector, size_t num, void *out)
     }
 
 #ifdef MULTITHREADED
-    rwlock_read_exit_critical(&vector->lock);
+    rwlock_unlock(&vector->lock);
 #endif
 
     return ret;
@@ -168,7 +181,9 @@ int vector_put(struct vector *vector, void *in)
     int ret = SUCCESS;
 
 #ifdef MULTITHREADED
-    rwlock_write_enter_critical(&vector->lock);
+    printf("Trying to lock...\n");
+    rwlock_write_lock(&vector->lock);
+    printf("Locked...\n");
 #endif
 
     if (vector->cap > vector->size) {
@@ -183,7 +198,7 @@ int vector_put(struct vector *vector, void *in)
     }
 
 #ifdef MULTITHREADED
-    rwlock_write_exit_critical(&vector->lock);
+    rwlock_unlock(&vector->lock);
 #endif
 
     return ret;
@@ -240,7 +255,7 @@ int vector_shrink(struct vector *vector)
     return SUCCESS;
 }
 
-int vector_get_size(struct vector *vector)
+size_t vector_get_size(struct vector *vector)
 {
     return vector->size;
 }
