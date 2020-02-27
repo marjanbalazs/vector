@@ -87,6 +87,7 @@ struct vector {
 };
 
 static int vector_grow(struct vector *vector);
+static int vector_shrink(struct vector *vector);
 
 int vector_construct(struct vector **vector, size_t elem_size)
 {
@@ -180,12 +181,50 @@ int vector_put(struct vector *vector, void *in)
     return ret;
 }
 
+int vector_remove(struct vector *vector, size_t num)
+{
+    int ret;
+
+    if ( num > vector->size ) {
+        ret = ERROR;
+    } else {
+        char *ptr = (char*)vector->vector;
+        // If num == size, meaning its the last element is being removed
+        // then we are actually pointing one element size over the buffer
+        // Assumption is that no copying will be done since size to copy is 0
+        memmove((void*)&ptr[vector->elem_size * num],
+                (void*)&ptr[vector->elem_size * (num + 1)],
+                vector->elem_size * (vector->size - num  - 1));
+
+        vector->size--;
+
+        ret = SUCCESS;
+    }
+
+    return ret;
+}
+
 int vector_grow(struct vector *vector)
 {
+    // TODO: Fix return value
     vector->cap = vector->cap * GROWTH_FACTOR;
     void *new_data = malloc(vector->cap * vector->elem_size);
     memcpy(new_data, 
             vector->vector, 
+            vector->size * vector->elem_size);
+    free(vector->vector);
+    vector->vector = new_data;
+
+    return SUCCESS;
+}
+
+int vector_shrink(struct vector *vector)
+{
+    // TODO: Fix return value
+    vector->cap = vector->cap * SHRINK_FACTOR;
+    void *new_data = malloc(vector->cap * vector->elem_size);
+    memcpy(new_data,
+            vector->vector,
             vector->size * vector->elem_size);
     free(vector->vector);
     vector->vector = new_data;

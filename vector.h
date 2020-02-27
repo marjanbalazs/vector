@@ -13,3 +13,4 @@ int vector_construct(struct vector **vector, size_t elem_size);
 int vector_destroy(struct vector *vector);
 int vector_get(struct vector *vector, size_t num, void *out);
 int vector_put(struct vector *vector, void *in);
+int vector_remove(struct vector *vector, size_t num);
