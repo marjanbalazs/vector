@@ -9,11 +9,15 @@
 #define SUCCESS             ( 0 )
 
 #define INITIAL_CAP         ( 8 )
-#define GROWTH_TRIGGER      ()
+#define GROWTH_TRIGGER      ( 3/4 )
 #define GROWTH_FACTOR       ( 2 )
 #define SHRINK_FACTOR       ( 1/2 )
 
+//#define MULTITHREADED
+
 #ifdef MULTITHREADED
+
+
 
 struct rwlock {
     bool writer_active;
@@ -36,43 +40,47 @@ int init_rwlockl(struct rwlock *lock)
     return SUCCESS;
 }
 
-#define RWLOCK_READ_ENTER_CRITICAL(lock) do {    \
-    pthread_mutex_lock(&lock.mutex);             \
-    lock.read_count++;                           \
-    while ( lock.read_count == 1 ) {             \
-        pthread_cond_wait(&lock.r_cond,          \
-                    &lock.mutex);                \
-    }                                            \
-    pthread_mutex_unlock(&lock.mutex);           \
-} while(0)
+void rwlock_read_enter_critical(struct rwlock *lock)
+{
+    pthread_mutex_lock(&lock->mutex);
+    lock->read_count++;
+    while ( lock->read_count == 1 ) {
+        pthread_cond_wait(&lock->r_cond,
+                    &lock->mutex);
+    }
+    pthread_mutex_unlock(&lock->mutex);
+}
  
-#define RWLOCK_READ_EXIT_CRITICAL(lock) do {     \
-    pthread_mutex_lock(&lock.mutex);             \
-    lock.read_count--;                           \
-    while ( lock.read_count == 0 ) {             \
-        pthread_cond_signal(&lock.r_cond);       \
-    }                                            \
-    pthread_mutex_unlock(&lock.mutex);           \
-} while(0)
+void rwlock_read_exit_critical(struct rwlock *lock)
+{
+    pthread_mutex_lock(&lock->mutex);
+    lock->read_count--;
+    while ( lock->read_count == 0 ) {
+        pthread_cond_signal(&lock->r_cond);
+    }
+    pthread_mutex_unlock(&lock->mutex);
+}
 
-#define RWLOCK_WRITE_ENTER_CRITICAL(lock) do {   \
-    pthread_mutex_lock(&lock.mutex);             \
-    lock.write_count++;                          \
-    if ( lock.write_count > 0 ) {                \
-        pthread_cond_wait(&lock.w_cond,          \
-                         &lock.mutex);           \
-    }                                            \
-    pthread_mutex_unlock(&lock.mutex);           \
-} while(0)
+void rwlock_write_enter_critical(struct rwlock *lock)
+{
+    pthread_mutex_lock(&lock->mutex);
+    lock->write_count++;
+    if ( lock->write_count > 0 ) {
+        pthread_cond_wait(&lock->w_cond,
+                         &lock->mutex);
+    }
+    pthread_mutex_unlock(&lock->mutex);
+}
 
-#define RWLOCK_WRITE_EXIT_CRITICAL(lock) do {    \
-    pthread_mutex_lock(&lock.mutex);             \
-    lock.write_count--;                          \
-    if ( lock.write_count == 0) {                \
-        pthread_cond_signal(&lock.w_cond);       \
-    }                                            \
-    pthread_mutex_unlock(&lock.mutex);           \
-} while(0)
+void rwlock_write_exit_critical(struct rwlock *lock)
+{
+    pthread_mutex_lock(&lock->mutex);
+    lock->write_count--;
+    if ( lock->write_count == 0) {
+        pthread_cond_signal(&lock->w_cond);
+    }
+    pthread_mutex_unlock(&lock->mutex);
+}
 
 #endif
 
@@ -137,7 +145,7 @@ int vector_get(struct vector *vector, size_t num, void *out)
     int ret = SUCCESS;
 
 #ifdef MULTITHREADED
-    RWLOCK_READ_ENTER_CRITICAL(vector->lock);
+    rwlock_read_enter_critical(&(vector->lock));
 #endif
 
     if ( num > vector->size ) {
@@ -149,7 +157,7 @@ int vector_get(struct vector *vector, size_t num, void *out)
     }
 
 #ifdef MULTITHREADED
-    RWLOCK_READ_EXIT_CRITICAL(vector->lock);
+    rwlock_read_exit_critical(&vector->lock);
 #endif
 
     return ret;
@@ -160,7 +168,7 @@ int vector_put(struct vector *vector, void *in)
     int ret = SUCCESS;
 
 #ifdef MULTITHREADED
-    RWLOCK_WRITE_ENTER_CRITICAL(vector->lock);
+    rwlock_write_enter_critical(&vector->lock);
 #endif
 
     if (vector->cap > vector->size) {
@@ -175,7 +183,7 @@ int vector_put(struct vector *vector, void *in)
     }
 
 #ifdef MULTITHREADED
-    RWLOCK_WRITE_EXIT_CRITICAL(vector->lock);
+    rwlock_write_exit_critical(&vector->lock);
 #endif
 
     return ret;
@@ -230,5 +238,10 @@ int vector_shrink(struct vector *vector)
     vector->vector = new_data;
 
     return SUCCESS;
+}
+
+int vector_get_size(struct vector *vector)
+{
+    return vector->size;
 }
 

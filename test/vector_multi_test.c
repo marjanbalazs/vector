@@ -12,7 +12,7 @@ struct thread_info {
     char *argv_string;
 };
 
-#define READERS     ( 10 )
+#define READERS     ( 2 )
 #define WRITERS     ( 2 )
 #define THREADS     ( READERS + WRITERS )
 
@@ -22,15 +22,22 @@ struct thread_info thread_array[THREADS];
 void* reader_thread(void *arg)
 {
     while (1) {
-        printf("Reader thread pid: %d\n", pthread_self());
-        sleep(1);
+        printf("Reader thread pid: %d, items: %d\n", pthread_self(),
+        vector_get_size( (Vector*)arg ));
+        sleep(5);
     }
 }
 
 void* writer_thread(void *arg)
 {
+    int init = 0;
     while (1) {
         printf("Writer thread pid: %d\n", pthread_self());
+        if ( vector_get_size(((struct vector*)arg)) < 10 ) {
+            vector_put( (Vector*)arg, &init);
+            // This is not atomic so fuck knows what will happen...
+            init++;
+        }
         sleep(5);
     }
 }
