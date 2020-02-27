@@ -187,14 +187,22 @@ int vector_put(struct vector *vector, void *in)
 #endif
 
     if (vector->cap > vector->size) {
+        
         char *ptr = (char*)vector->vector;
         memcpy((void*)&ptr[vector->size * vector->elem_size],
                 in,
                 vector->elem_size);
         vector->size++;
+        
     } else {
         vector_grow(vector);
-        vector_put(vector, in);
+
+        char *ptr = (char*)vector->vector;
+        memcpy((void*)&ptr[vector->size * vector->elem_size],
+                in,
+                vector->elem_size);
+        vector->size++;
+
     }
 
 #ifdef MULTITHREADED
