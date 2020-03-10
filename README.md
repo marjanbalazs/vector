@@ -1,2 +1,2 @@
 # vector
-Generic, multithreaded vector implementation in C
+Generic, multithreaded vector implementation in C.
